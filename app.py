@@ -464,18 +464,29 @@ async def main(page: ft.Page):
 
     async def build_analytics_view():
         """Builds the analytics view by fetching and formatting data."""
+        # Create loading state
         view_content = ft.Column([
             ft.ProgressRing(),
-            ft.Text("Loading analytics data...")
+            ft.Text("Loading analytics data...", size=16)
         ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
         view = ft.View(
             "/analytics",
             [
-                ft.AppBar(title=ft.Text("Analytics"), bgcolor=ft.Colors.ON_SURFACE_VARIANT, leading=ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda _: page.go("/"))),
-                ft.Container(view_content, padding=20, expand=True)
+                ft.AppBar(
+                    title=ft.Text("Analytics Dashboard", size=20, weight=ft.FontWeight.BOLD),
+                    bgcolor=ft.Colors.ON_SURFACE_VARIANT,
+                    leading=ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda _: page.go("/")),
+                    center_title=True
+                ),
+                ft.Container(
+                    content=view_content,
+                    padding=20,
+                    expand=True,
+                    bgcolor=ft.Colors.SURFACE
+                )
             ],
-            scroll=ft.ScrollMode.ADAPTIVE # Allow scrolling for the whole view
+            scroll=ft.ScrollMode.ADAPTIVE
         )
 
         # Fetch data asynchronously after returning the initial view structure
@@ -490,76 +501,170 @@ async def main(page: ft.Page):
                 if 'error' in result or 'detail' in result:
                     api_error_msg = result.get('error') or result.get('detail')
                     print(f"API returned error: {api_error_msg}")
-                    view_content.controls = [ft.Text(f"API Error: {api_error_msg}")]
+                    view_content.controls = [
+                        ft.Card(
+                            content=ft.Container(
+                                content=ft.Column([
+                                    ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED, size=40),
+                                    ft.Text(f"Error: {api_error_msg}", size=16, color=ft.Colors.RED)
+                                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                                padding=20
+                            ),
+                            elevation=5,
+                            margin=10
+                        )
+                    ]
                 else:
                     images = result.get('images', [])
                     print(f"Extracted images (count: {len(images)}): {images[:2]}...")
 
                     if not images:
                         print("No images found in API response.")
-                        view_content.controls = [ft.Text("No images found in the database.")]
+                        view_content.controls = [
+                            ft.Card(
+                                content=ft.Container(
+                                    content=ft.Column([
+                                        ft.Icon(ft.Icons.INFO_OUTLINE, color=ft.Colors.BLUE, size=40),
+                                        ft.Text("No images found in the database.", size=16)
+                                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                                    padding=20
+                                ),
+                                elevation=5,
+                                margin=10
+                            )
+                        ]
                     else:
                         print("Processing image data for view...")
                         total_images = len(images)
                         images_with_alerts = sum(1 for img in images if img['alert_count'] > 0)
                         alert_rate = (images_with_alerts / total_images) * 100 if total_images > 0 else 0
 
-                        summary_text = (
-                            f"Total Images: {total_images}\n"
-                            f"Images with Security Alerts: {images_with_alerts}\n"
-                            f"Alert Rate: {alert_rate:.2f}%"
-                        )
+                        # Create statistics cards
+                        stats_row = ft.Row([
+                            ft.Card(
+                                content=ft.Container(
+                                    content=ft.Column([
+                                        ft.Icon(ft.Icons.PHOTO_LIBRARY, color=ft.Colors.BLUE, size=30),
+                                        ft.Text(f"{total_images}", size=24, weight=ft.FontWeight.BOLD),
+                                        ft.Text("Total Images", size=14)
+                                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
+                                    padding=20
+                                ),
+                                elevation=5,
+                                margin=10,
+                                expand=True
+                            ),
+                            ft.Card(
+                                content=ft.Container(
+                                    content=ft.Column([
+                                        ft.Icon(ft.Icons.WARNING, color=ft.Colors.RED, size=30),
+                                        ft.Text(f"{images_with_alerts}", size=24, weight=ft.FontWeight.BOLD),
+                                        ft.Text("Alerts Detected", size=14)
+                                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
+                                    padding=20
+                                ),
+                                elevation=5,
+                                margin=10,
+                                expand=True
+                            ),
+                            ft.Card(
+                                content=ft.Container(
+                                    content=ft.Column([
+                                        ft.Icon(ft.Icons.SPEED, color=ft.Colors.ORANGE, size=30),
+                                        ft.Text(f"{alert_rate:.1f}%", size=24, weight=ft.FontWeight.BOLD),
+                                        ft.Text("Alert Rate", size=14)
+                                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
+                                    padding=20
+                                ),
+                                elevation=5,
+                                margin=10,
+                                expand=True
+                            )
+                        ], spacing=10)
 
-                        recent_images_text = "\n----- 10 Most Recent Images -----\n"
-                        for i, img in enumerate(images[:10]):
-                            alert_status = f"🚨 {img['alert_count']} alerts" if img['alert_count'] > 0 else "No alerts"
-                            recent_images_text += f"{i+1}. [{img['timestamp']}] {img['filename']} - {alert_status}\n"
+                        # Create recent alerts timeline
+                        recent_alerts = []
+                        alert_count = 0
+                        for img in images:
+                            if img['alert_count'] > 0:
+                                alert_card = ft.Card(
+                                    content=ft.Container(
+                                        content=ft.Column([
+                                            ft.Row([
+                                                ft.Icon(ft.Icons.WARNING, color=ft.Colors.RED, size=20),
+                                                ft.Text(f"{img['timestamp']}", size=14, weight=ft.FontWeight.BOLD)
+                                            ], spacing=10),
+                                            ft.Text(f"File: {img['filename']}", size=14),
+                                            ft.Text(f"Alerts: {img['alert_count']}", size=14, color=ft.Colors.RED)
+                                        ], spacing=5),
+                                        padding=10
+                                    ),
+                                    elevation=3,
+                                    margin=5
+                                )
+                                recent_alerts.append(alert_card)
+                                alert_count += 1
+                                if alert_count >= 5:
+                                    break
 
-                        recent_alerts_text = ""
-                        if images_with_alerts > 0:
-                            recent_alerts_text += "\n----- Recent Security Alerts -----\n"
-                            alert_count = 0
-                            for img in images:
-                                if img['alert_count'] > 0:
-                                    recent_alerts_text += f"Image: {img['filename']} - {img['timestamp']}\n"
-                                    if img['s3_url']:
-                                        recent_alerts_text += f"  S3 URL: {img['s3_url']}\n"
-                                    recent_alerts_text += f"  Total Alerts: {img['alert_count']}\n"
-                                    recent_alerts_text += "-" * 40 + "\n"
-                                    alert_count += 1
-                                    if alert_count >= 10:
-                                        break
-
+                        # Create the main content layout
                         view_content.controls = [
-                            ft.Text(summary_text, selectable=True),
-                            ft.Divider(),
-                            ft.Text(recent_images_text, selectable=True),
-                            ft.Divider(),
-                            ft.Text(recent_alerts_text, selectable=True),
+                            stats_row,
+                            ft.Container(height=20),  # Spacer
+                            ft.Text("Recent Security Alerts", size=18, weight=ft.FontWeight.BOLD),
+                            ft.Container(
+                                content=ft.Column(recent_alerts, spacing=10),
+                                padding=10,
+                                border=ft.border.all(1, ft.Colors.OUTLINE),
+                                border_radius=10
+                            )
                         ]
 
             except requests.exceptions.RequestException as req_e:
                 error_msg = f"Error accessing database: {str(req_e)}"
                 print(f"RequestException: {error_msg}")
-                view_content.controls = [ft.Text(error_msg)]
+                view_content.controls = [
+                    ft.Card(
+                        content=ft.Container(
+                            content=ft.Column([
+                                ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED, size=40),
+                                ft.Text(error_msg, size=16, color=ft.Colors.RED)
+                            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                            padding=20
+                        ),
+                        elevation=5,
+                        margin=10
+                    )
+                ]
             except Exception as exc:
                 error_msg = f"An unexpected error occurred: {str(exc)}"
                 print(f"Generic Exception: {error_msg}")
                 import traceback
                 traceback.print_exc()
-                view_content.controls = [ft.Text(error_msg)]
+                view_content.controls = [
+                    ft.Card(
+                        content=ft.Container(
+                            content=ft.Column([
+                                ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED, size=40),
+                                ft.Text(error_msg, size=16, color=ft.Colors.RED)
+                            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                            padding=20
+                        ),
+                        elevation=5,
+                        margin=10
+                    )
+                ]
 
             # Update the view content
-            # Check if the current view is still the analytics view before updating
             if page.route == "/analytics":
                 print("Updating analytics view content...")
-                page.update() # Use synchronous update
+                page.update()
             else:
                 print("Route changed before analytics data fetched, not updating view.")
 
         # Schedule the data fetching task
         asyncio.create_task(fetch_and_update())
-        return view # Return the view with the loading indicator
+        return view
 
     async def route_change(route):
         print(f"Route change requested: {page.route}")
