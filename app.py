@@ -31,6 +31,7 @@ async def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.START
     page.window_width = 1200
     page.window_height = 800
+    page.window_icon = "app_icon.png"
 
     is_running = False
     video_update_task = None
