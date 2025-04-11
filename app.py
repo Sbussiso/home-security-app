@@ -12,18 +12,18 @@ load_dotenv()
 
 # Email to receive security alerts
 ALERT_EMAIL = os.getenv('EMAIL_USER')
-# Local REST API endpoints
-REST_API_URL = "http://localhost:5000"
-ANALYZE_ENDPOINT = f"{REST_API_URL}/analyze"
-UPLOAD_ENDPOINT = f"{REST_API_URL}/upload"
-NOTIFY_ENDPOINT = f"{REST_API_URL}/notify"
-DB_IMAGE_ENDPOINT = f"{REST_API_URL}/db/image"
-DB_ALERT_ENDPOINT = f"{REST_API_URL}/db/alert"
-DB_CLEANUP_ENDPOINT = f"{REST_API_URL}/db/cleanup"
-DB_DELETE_ENDPOINT = f"{REST_API_URL}/db/delete-file"
-DB_S3URL_ENDPOINT = f"{REST_API_URL}/db/s3url"
-S3_BUCKET_DELETE_ENDPOINT = f"{REST_API_URL}/s3/bucket/delete"
-CAMERA_CONTROL_ENDPOINT = f"{REST_API_URL}/camera"
+# Local REST API endpoints (Default, will be configurable)
+DEFAULT_REST_API_URL = "http://localhost:5000"
+ANALYZE_ENDPOINT = f"{DEFAULT_REST_API_URL}/analyze"
+UPLOAD_ENDPOINT = f"{DEFAULT_REST_API_URL}/upload"
+NOTIFY_ENDPOINT = f"{DEFAULT_REST_API_URL}/notify"
+DB_IMAGE_ENDPOINT = f"{DEFAULT_REST_API_URL}/db/image"
+DB_ALERT_ENDPOINT = f"{DEFAULT_REST_API_URL}/db/alert"
+DB_CLEANUP_ENDPOINT = f"{DEFAULT_REST_API_URL}/db/cleanup"
+DB_DELETE_ENDPOINT = f"{DEFAULT_REST_API_URL}/db/delete-file"
+DB_S3URL_ENDPOINT = f"{DEFAULT_REST_API_URL}/db/s3url"
+S3_BUCKET_DELETE_ENDPOINT = f"{DEFAULT_REST_API_URL}/s3/bucket/delete"
+CAMERA_CONTROL_ENDPOINT = f"{DEFAULT_REST_API_URL}/camera"
 
 async def main(page: ft.Page):
     page.title = "Security Camera System"
@@ -45,14 +45,34 @@ async def main(page: ft.Page):
     )
 
     status_label = ft.Text("System Ready")
+    # Add input field for API URL
+    api_url_input = ft.TextField(
+        label="REST API URL",
+        value=DEFAULT_REST_API_URL, # Default value
+        hint_text="Enter the base URL of the backend API (e.g., http://192.168.1.100:5000)",
+        width=400
+    )
     alerts_list = ft.ListView(expand=1, spacing=10, padding=10, auto_scroll=True)
+
+    # Helper function to get current base URL
+    def get_base_url():
+        url = api_url_input.value.strip()
+        if not url:
+            return DEFAULT_REST_API_URL # Fallback to default if empty
+        # Basic validation: ensure it starts with http:// or https://
+        if not url.startswith(("http://", "https://")):
+            # Optionally add user feedback here (e.g., change border color)
+            print(f"Warning: Invalid URL format: {url}. Attempting to use anyway.")
+        return url.rstrip('/') # Remove trailing slash if present
 
     async def update_video_feed():
         """Fetches the latest frame from the API and updates the image control."""
         nonlocal is_running
         while is_running:
             try:
-                response = await asyncio.to_thread(requests.get, CAMERA_CONTROL_ENDPOINT, timeout=5)
+                base_url = get_base_url()
+                camera_endpoint = f"{base_url}/camera"
+                response = await asyncio.to_thread(requests.get, camera_endpoint, timeout=5)
                 response.raise_for_status()
                 result = response.json()
 
@@ -82,8 +102,10 @@ async def main(page: ft.Page):
             start_button.disabled = True
             await add_alert(page, "Attempting to start monitoring...")
             try:
+                base_url = get_base_url()
+                camera_endpoint = f"{base_url}/camera"
                 response = await asyncio.to_thread(
-                    requests.post, CAMERA_CONTROL_ENDPOINT, json={'action': 'start'}, timeout=10
+                    requests.post, camera_endpoint, json={'action': 'start'}, timeout=10
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -140,7 +162,9 @@ async def main(page: ft.Page):
             # Now attempt to inform the backend API (fire and forget for now)
             async def send_stop_request():
                 try:
-                    await asyncio.to_thread(requests.post, CAMERA_CONTROL_ENDPOINT, json={'action': 'stop'}, timeout=10)
+                    base_url = get_base_url()
+                    camera_endpoint = f"{base_url}/camera"
+                    await asyncio.to_thread(requests.post, camera_endpoint, json={'action': 'stop'}, timeout=10)
                     # Log success/failure if needed, but don't block UI
                 except Exception as stop_req_e:
                     print(f"Failed to send stop request to API: {stop_req_e}")
@@ -194,9 +218,11 @@ async def main(page: ft.Page):
         await add_alert(page, "Deleting S3 bucket...")
         try:
             print("Attempting to delete S3 bucket...")
+            base_url = get_base_url()
+            s3_delete_endpoint = f"{base_url}/s3/bucket/delete"
             response = await asyncio.to_thread(
                 requests.post, 
-                S3_BUCKET_DELETE_ENDPOINT, 
+                s3_delete_endpoint, 
                 json={
                     'bucket_name': 'computer-vision-analysis',
                     'confirmation': 'CONFIRM_DELETE'
@@ -230,9 +256,11 @@ async def main(page: ft.Page):
         await add_alert(page, "Cleaning up database...")
         try:
             print("Attempting to clean database...")
+            base_url = get_base_url()
+            db_cleanup_endpoint = f"{base_url}/db/cleanup"
             response = await asyncio.to_thread(
                 requests.post, 
-                DB_CLEANUP_ENDPOINT, 
+                db_cleanup_endpoint, 
                 params={'days': 0}, 
                 timeout=30
             )
@@ -264,9 +292,11 @@ async def main(page: ft.Page):
         await add_alert(page, "Deleting database file...")
         try:
             print("Attempting to delete database file...")
+            base_url = get_base_url()
+            db_delete_endpoint = f"{base_url}/db/delete-file"
             response = await asyncio.to_thread(
                 requests.post, 
-                DB_DELETE_ENDPOINT, 
+                db_delete_endpoint, 
                 timeout=10
             )
             print(f"DB file deletion response status: {response.status_code}")
@@ -379,6 +409,9 @@ async def main(page: ft.Page):
             ft.Container(height=10), # Spacer
             ft.Text("Status", theme_style=ft.TextThemeStyle.TITLE_MEDIUM),
             status_label,
+            ft.Container(height=10), # Spacer
+            api_url_input, # Add the input field here
+            ft.Container(height=10), # Spacer
         ],
         expand=True,
         spacing=10
@@ -492,7 +525,9 @@ async def main(page: ft.Page):
         async def fetch_and_update():
             try:
                 print("Attempting to fetch analytics data for view...")
-                response = await asyncio.to_thread(requests.get, DB_IMAGE_ENDPOINT, params={'limit': 1000}, timeout=15)
+                base_url = get_base_url()
+                db_image_endpoint = f"{base_url}/db/image"
+                response = await asyncio.to_thread(requests.get, db_image_endpoint, params={'limit': 1000}, timeout=15)
                 response.raise_for_status()
                 result = response.json()
                 print(f"API Response Raw: {result}")
@@ -693,7 +728,9 @@ async def main(page: ft.Page):
     async def run_initial_cleanup(page_ref: ft.Page):
         try:
             await add_alert(page_ref, "Performing initial database cleanup...")
-            response = await asyncio.to_thread(requests.post, DB_CLEANUP_ENDPOINT, params={'days': 30}, timeout=30)
+            base_url = get_base_url()
+            db_cleanup_endpoint = f"{base_url}/db/cleanup"
+            response = await asyncio.to_thread(requests.post, db_cleanup_endpoint, params={'days': 30}, timeout=30)
             response.raise_for_status()
             result = response.json()
             if result.get('success'):
