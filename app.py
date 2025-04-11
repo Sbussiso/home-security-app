@@ -37,8 +37,7 @@ async def main(page: ft.Page):
 
     # --- UI Controls ---
     video_image = ft.Image(
-        # Placeholder image or leave empty initially
-        # src="placeholder.png", 
+        src="video_icon.png",
         width=640, 
         height=480,
         fit=ft.ImageFit.CONTAIN,
